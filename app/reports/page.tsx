@@ -150,7 +150,8 @@ export default function ReportsPage() {
   const goodsReceipts = useGoodsReceipts();
   const goodsIssues = useGoodsIssues();
   const suppliers = useSuppliers();
-  const warehouses = useWarehouses();
+  const warehousesRaw = useWarehouses();
+  const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : [];
 
   const [activeReport, setActiveReport] = useState<string>("inventory");
 
@@ -667,7 +668,8 @@ function InventoryReport({
   filters: ReportFilters;
   onFilterChange: (key: keyof ReportFilters, value: string) => void;
 }) {
-  const warehouses = useWarehouses();
+  const warehousesRaw = useWarehouses();
+  const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : [];
 
   const categoryChartData = useMemo(() => {
     const cats: Record<string, number> = {};

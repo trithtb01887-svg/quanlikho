@@ -366,7 +366,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   fetchWarehouses: async () => {
     set({ isLoading: true, error: null });
     try {
-      const warehouses = await fetchJSON<Warehouse[]>(`${API_BASE}/warehouses`);
+      const warehouses = await fetchListData<Warehouse>(`${API_BASE}/warehouses`);
       set({ warehouses, isLoading: false });
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false });

@@ -160,7 +160,8 @@ export default function StocktakePage() {
   const sessions = useStocktakeSessions();
   const inventoryItems = useInventoryItems();
   const products = useProducts();
-  const warehouses = useWarehouses();
+  const warehousesRaw = useWarehouses();
+  const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : [];
   const { addStocktakeSession, updateStocktakeSession, completeStocktake, fetchStocktakes } = useStocktakeActions();
   const { adjustInventoryQuantity, checkLowStockAlerts } = useInventoryActions();
   const { addAuditLog } = useAuditLogActions();

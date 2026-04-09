@@ -136,7 +136,8 @@ function isValidWarehouseId(id: string | null | undefined): id is string {
 
 export default function GoodsIssuePage() {
   const products = useProducts();
-  const warehouses = useWarehouses();
+  const warehousesRaw = useWarehouses();
+  const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : [];
   const inventoryItems = useInventoryItems();
   const issues = useGoodsIssues();
   const { addGoodsIssue, updateGoodsIssue, fetchGoodsIssues } = useGoodsIssueActions();

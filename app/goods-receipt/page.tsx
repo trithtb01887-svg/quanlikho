@@ -182,7 +182,8 @@ export default function GoodsReceiptPage() {
   const receipts = useGoodsReceipts();
   const purchaseOrders = usePurchaseOrders();
   const suppliers = useSuppliers();
-  const warehouses = useWarehouses();
+  const warehousesRaw = useWarehouses();
+  const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : [];
   const products = useProducts();
   const inventoryItems = useInventoryItems();
   const { addGoodsReceipt, completeGoodsReceipt, fetchGoodsReceipts } = useGoodsReceiptActions();

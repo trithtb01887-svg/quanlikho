@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AppShell, ErrorBoundary } from "@/components/shared";
 import BarcodeScanner from "@/components/shared/BarcodeScanner";
@@ -77,8 +78,11 @@ import {
   useAuditLogs,
   useAuditLogActions,
   useInventoryActions,
+  useGoodsReceiptActions,
+  useGoodsIssueActions,
+  useWarehouseActions,
 } from "@/lib/store";
-import { ProductCategory, AuditAction } from "@/lib/types";
+import { ProductCategory, AuditAction, GoodsIssueReason } from "@/lib/types";
 import { InventoryItem, Product, Warehouse } from "@/lib/types";
 import {
   LineChart,
@@ -94,6 +98,7 @@ import {
   exportInventoryReport,
   InventoryExportItem,
 } from "@/lib/exportExcel";
+import { toast } from "sonner";
 import { printBarcodeLabels, LabelPrintData } from "@/lib/printTemplates";
 
 const CATEGORY_LABELS: Record<ProductCategory, string> = {
@@ -171,31 +176,46 @@ interface AdjustmentForm {
   notes: string;
 }
 
+interface TransferForm {
+  targetWarehouseId: string;
+  quantity: number;
+  notes: string;
+}
+
 export default function InventoryPage() {
-  const inventoryItems = useInventoryItems();
-  const products = useProducts();
-  const warehouses = useWarehouses();
+  const inventoryItemsRaw = useInventoryItems();
+  const inventoryItems = Array.isArray(inventoryItemsRaw) ? inventoryItemsRaw : [];
+  const productsRaw = useProducts();
+  const products = Array.isArray(productsRaw) ? productsRaw : [];
+  const warehousesRaw = useWarehouses();
+  const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : [];
   const receipts = useGoodsReceipts();
   const issues = useGoodsIssues();
   const auditLogs = useAuditLogs();
   const { addAuditLog } = useAuditLogActions();
   const { adjustInventoryQuantity, fetchInventory } = useInventoryActions();
+  const { fetchWarehouses } = useWarehouseActions();
+  const { addGoodsIssue } = useGoodsIssueActions();
+  const { addGoodsReceipt } = useGoodsReceiptActions();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [warehouseFilter, setWarehouseFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const router = useRouter();
   const [sortBy, setSortBy] = useState<string>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  // Fetch inventory on mount
+  // Fetch inventory and warehouses on mount
   useEffect(() => {
     fetchInventory();
-  }, [fetchInventory]);
+    fetchWarehouses();
+  }, [fetchInventory, fetchWarehouses]);
 
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [generatorProduct, setGeneratorProduct] = useState<any>(null);
@@ -204,6 +224,12 @@ export default function InventoryPage() {
     reason: "",
     notes: "",
   });
+  const [transferForm, setTransferForm] = useState<TransferForm>({
+    targetWarehouseId: "",
+    quantity: 0,
+    notes: "",
+  });
+  const [isTransferring, setIsTransferring] = useState(false);
 
   const tableRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
@@ -519,6 +545,182 @@ export default function InventoryPage() {
     setSelectedItem(null);
     setIsDetailOpen(false);
   }, [selectedItem, adjustmentForm, adjustInventoryQuantity, addAuditLog]);
+
+  // Get warehouses list for transfer (excluding current warehouse, only active)
+  const targetWarehouses = useMemo(() => {
+    if (!selectedItem) return [];
+    console.log('[Transfer] all warehouses:', warehouses.length);
+    console.log('[Transfer] selectedItem.warehouseId:', selectedItem?.warehouseId);
+    const filtered = warehouses.filter(
+      (w: any) => w.id !== selectedItem.warehouseId && w.isActive !== false
+    );
+    console.log('[Transfer] targetWarehouses:', filtered.length);
+    return filtered;
+  }, [warehouses, selectedItem]);
+
+  // Handle open transfer dialog
+  const handleOpenTransfer = useCallback(() => {
+    if (!selectedItem) return;
+    setTransferForm({
+      targetWarehouseId: "",
+      quantity: selectedItem.quantityAvailable,
+      notes: "",
+    });
+    setIsTransferOpen(true);
+  }, [selectedItem]);
+
+  // Handle transfer submit
+  const handleTransfer = useCallback(async () => {
+    if (!selectedItem || !transferForm.targetWarehouseId || transferForm.quantity <= 0) {
+      toast.error("Vui lòng nhập đầy đủ thông tin");
+      return;
+    }
+
+    if (transferForm.quantity > selectedItem.quantityAvailable) {
+      toast.error("Số lượng chuyển không được lớn hơn số lượng hiện có");
+      return;
+    }
+
+    setIsTransferring(true);
+    try {
+      const sourceWarehouse = warehouses.find((w: any) => w.id === selectedItem.warehouseId);
+      const destWarehouse = warehouses.find((w: any) => w.id === transferForm.targetWarehouseId);
+      const product = selectedItem.product;
+
+      // 1. Tạo GoodsIssue cho kho nguồn (xuất)
+      const issueNumber = `XK-${Date.now().toString().slice(-6)}`;
+      const issueItems = [{
+        id: `gi-tf-${Date.now()}`,
+        productId: selectedItem.productId,
+        productSku: product?.sku || "",
+        productName: product?.name || "",
+        unit: product?.unit || "piece",
+        quantity: transferForm.quantity,
+        unitPrice: product?.costPrice || 0,
+        totalPrice: (product?.costPrice || 0) * transferForm.quantity,
+        warehouseId: selectedItem.warehouseId,
+      }];
+
+      const newIssue = {
+        id: `gi-${Date.now()}`,
+        issueNumber,
+        reason: GoodsIssueReason.TRANSFER,
+        customerName: `Chuyển đến: ${destWarehouse?.name}`,
+        items: issueItems,
+        subtotal: (product?.costPrice || 0) * transferForm.quantity,
+        totalValue: (product?.costPrice || 0) * transferForm.quantity,
+        status: "completed",
+        issueDate: new Date(),
+        issuedBy: "user-001",
+        issuedByName: "Nguyễn Văn Minh",
+        warehouseId: selectedItem.warehouseId,
+        warehouse: sourceWarehouse,
+        notes: transferForm.notes ? `Chuyển kho: ${transferForm.notes}` : "Chuyển kho",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // 2. Tạo GoodsReceipt cho kho đích (nhập)
+      const receiptNumber = `GRN-${Date.now().toString().slice(-6)}`;
+      const receiptItems = [{
+        id: `gr-tf-${Date.now()}`,
+        productId: selectedItem.productId,
+        productSku: product?.sku || "",
+        productName: product?.name || "",
+        unit: product?.unit || "piece",
+        quantity: transferForm.quantity,
+        receivedQuantity: transferForm.quantity,
+        acceptedQuantity: transferForm.quantity,
+        rejectedQuantity: 0,
+        unitPrice: product?.costPrice || 0,
+        totalPrice: (product?.costPrice || 0) * transferForm.quantity,
+        warehouseId: transferForm.targetWarehouseId,
+        notes: "",
+      }];
+
+      const newReceipt = {
+        id: `gr-${Date.now()}`,
+        receiptNumber,
+        referenceType: "transfer" as const,
+        referenceId: newIssue.id,
+        supplierId: undefined,
+        supplierName: `Từ kho: ${sourceWarehouse?.name}`,
+        items: receiptItems,
+        subtotal: (product?.costPrice || 0) * transferForm.quantity,
+        taxAmount: 0,
+        totalValue: (product?.costPrice || 0) * transferForm.quantity,
+        status: "completed",
+        receiptDate: new Date(),
+        receivedBy: "user-001",
+        receivedByName: "Nguyễn Văn Minh",
+        warehouseId: transferForm.targetWarehouseId,
+        warehouse: destWarehouse,
+        notes: transferForm.notes ? `Chuyển kho: ${transferForm.notes}` : "Chuyển kho",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Thêm vào store
+      addGoodsIssue(newIssue);
+      addGoodsReceipt(newReceipt);
+
+      // Cập nhật tồn kho
+      adjustInventoryQuantity(
+        selectedItem.productId,
+        selectedItem.warehouseId,
+        transferForm.quantity,
+        "subtract"
+      );
+      adjustInventoryQuantity(
+        selectedItem.productId,
+        transferForm.targetWarehouseId,
+        transferForm.quantity,
+        "add"
+      );
+
+      // Ghi log
+      addAuditLog({
+        action: AuditAction.CREATE,
+        entity: "Transfer",
+        entityId: `transfer-${Date.now()}`,
+        entityName: `${sourceWarehouse?.name} → ${destWarehouse?.name}`,
+        userId: "user-001",
+        userName: "Nguyễn Văn Minh",
+        newValue: {
+          productId: selectedItem.productId,
+          productName: product?.name,
+          quantity: transferForm.quantity,
+          sourceWarehouseId: selectedItem.warehouseId,
+          sourceWarehouseName: sourceWarehouse?.name,
+          targetWarehouseId: transferForm.targetWarehouseId,
+          targetWarehouseName: destWarehouse?.name,
+        },
+        reason: `Chuyển kho ${transferForm.quantity} ${product?.unit} từ ${sourceWarehouse?.name} sang ${destWarehouse?.name}`,
+      });
+
+      toast.success(`Đã chuyển ${transferForm.quantity} ${product?.unit} từ ${sourceWarehouse?.name} sang ${destWarehouse?.name}`);
+      setIsTransferOpen(false);
+      setIsDetailOpen(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error("Transfer error:", error);
+      toast.error("Chuyển kho thất bại");
+    } finally {
+      setIsTransferring(false);
+    }
+  }, [selectedItem, transferForm, warehouses, addGoodsIssue, addGoodsReceipt, adjustInventoryQuantity, addAuditLog]);
+
+  // Handle create PO - navigate to purchase-order page with prefilled data
+  const handleCreatePO = useCallback(() => {
+    if (!selectedItem) return;
+    const product = selectedItem.product;
+    const params = new URLSearchParams({
+      productId: selectedItem.productId,
+      productName: product?.name || "",
+      sku: product?.sku || "",
+    });
+    router.push(`/purchase-order?${params.toString()}`);
+  }, [selectedItem, router]);
 
   const currentDiff = selectedItem 
     ? adjustmentForm.newQuantity - selectedItem.quantityAvailable 
@@ -936,6 +1138,7 @@ export default function InventoryPage() {
                   <Button
                     variant="outline"
                     className="border-slate-700 text-slate-300 hover:bg-slate-800"
+                    onClick={handleOpenTransfer}
                   >
                     <ArrowRightLeft className="w-4 h-4 mr-2" />
                     Chuyển kho
@@ -943,6 +1146,7 @@ export default function InventoryPage() {
                   <Button
                     variant="outline"
                     className="border-slate-700 text-slate-300 hover:bg-slate-800"
+                    onClick={handleCreatePO}
                   >
                     <ShoppingCart className="w-4 h-4 mr-2" />
                     Tạo PO
@@ -1070,6 +1274,116 @@ export default function InventoryPage() {
             >
               <Check className="w-4 h-4 mr-2" />
               Lưu điều chỉnh
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog open={isTransferOpen} onOpenChange={setIsTransferOpen}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+          <DialogHeader>
+            <DialogTitle>Chuyển kho</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {selectedItem?.product?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Source Warehouse */}
+            <div className="space-y-2">
+              <Label>Kho nguồn</Label>
+              <div className="p-3 bg-slate-800 rounded-lg">
+                <p className="text-white font-medium">
+                  {selectedItem?.warehouse?.name || "Kho hiện tại"}
+                </p>
+              </div>
+            </div>
+
+            {/* Target Warehouse */}
+            <div className="space-y-2">
+              <Label>Kho đích *</Label>
+              <Select
+                value={transferForm.targetWarehouseId}
+                onValueChange={(value) =>
+                  setTransferForm({ ...transferForm, targetWarehouseId: value || "" })
+                }
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700">
+                  <SelectValue placeholder="Chọn kho đích" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  {targetWarehouses.map((w: any) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {targetWarehouses.length === 0 && (
+                <p className="text-slate-500 text-sm">Không có kho nào khác để chuyển</p>
+              )}
+            </div>
+
+            {/* Quantity */}
+            <div className="space-y-2">
+              <Label>Số lượng chuyển *</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={1}
+                  max={selectedItem?.quantityAvailable || 0}
+                  value={transferForm.quantity}
+                  onChange={(e) =>
+                    setTransferForm({
+                      ...transferForm,
+                      quantity: parseInt(e.target.value) || 0,
+                    })
+                  }
+                  className="bg-slate-800 border-slate-700"
+                />
+                <span className="text-slate-400">
+                  / {selectedItem?.quantityAvailable || 0} có sẵn
+                </span>
+              </div>
+              {transferForm.quantity > (selectedItem?.quantityAvailable || 0) && (
+                <p className="text-red-400 text-sm">Số lượng không được lớn hơn số lượng hiện có</p>
+              )}
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label>Ghi chú</Label>
+              <Input
+                placeholder="VD: Chuyển để cân bằng tồn kho..."
+                value={transferForm.notes}
+                onChange={(e) =>
+                  setTransferForm({ ...transferForm, notes: e.target.value })
+                }
+                className="bg-slate-800 border-slate-700"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsTransferOpen(false)}
+              className="border-slate-700 text-slate-300"
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={handleTransfer}
+              disabled={
+                isTransferring ||
+                !transferForm.targetWarehouseId ||
+                transferForm.quantity <= 0 ||
+                transferForm.quantity > (selectedItem?.quantityAvailable || 0)
+              }
+              className="bg-sky-500 hover:bg-sky-600"
+            >
+              {isTransferring ? "Đang chuyển..." : "Chuyển kho"}
             </Button>
           </DialogFooter>
         </DialogContent>

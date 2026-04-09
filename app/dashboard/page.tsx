@@ -146,7 +146,8 @@ interface AlertData {
 export default function DashboardPage() {
   const dashboardData = useDashboardData();
   const products = useProducts();
-  const warehouses = useWarehouses();
+  const warehousesRaw = useWarehouses();
+  const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : [];
   const { markAlertAsRead } = useAlertActions();
 
   useEffect(() => {
