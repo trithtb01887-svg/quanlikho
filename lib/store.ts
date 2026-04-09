@@ -281,7 +281,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   // PRODUCT ACTIONS
   // ============================================
   
-  setProducts: (products) => set({ products }),
+  setProducts: (products) => set({ products: Array.isArray(products) ? products : [] }),
   
   addProduct: (product) =>
     set((state) => ({
@@ -342,7 +342,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   // WAREHOUSE ACTIONS
   // ============================================
   
-  setWarehouses: (warehouses) => set({ warehouses }),
+  setWarehouses: (warehouses) => set({ warehouses: Array.isArray(warehouses) ? warehouses : [] }),
   
   addWarehouse: (warehouse) =>
     set((state) => ({
@@ -377,7 +377,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   // INVENTORY ACTIONS
   // ============================================
   
-  setInventoryItems: (items) => set({ inventoryItems: items }),
+  setInventoryItems: (items) => set({ inventoryItems: Array.isArray(items) ? items : [] }),
   
   addInventoryItem: (item) =>
     set((state) => ({
@@ -540,7 +540,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   // SUPPLIER ACTIONS
   // ============================================
   
-  setSuppliers: (suppliers) => set({ suppliers }),
+  setSuppliers: (suppliers) => set({ suppliers: Array.isArray(suppliers) ? suppliers : [] }),
   
   addSupplier: (supplier) =>
     set((state) => ({
@@ -575,7 +575,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   // PURCHASE ORDER ACTIONS
   // ============================================
   
-  setPurchaseOrders: (orders) => set({ purchaseOrders: orders }),
+  setPurchaseOrders: (orders) => set({ purchaseOrders: Array.isArray(orders) ? orders : [] }),
   
   addPurchaseOrder: (order) =>
     set((state) => ({
@@ -718,7 +718,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   // GOODS RECEIPT ACTIONS
   // ============================================
   
-  setGoodsReceipts: (receipts) => set({ goodsReceipts: receipts }),
+  setGoodsReceipts: (receipts) => set({ goodsReceipts: Array.isArray(receipts) ? receipts : [] }),
   
   addGoodsReceipt: (receipt) =>
     set((state) => ({
@@ -808,7 +808,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   // GOODS ISSUE ACTIONS
   // ============================================
   
-  setGoodsIssues: (issues) => set({ goodsIssues: issues }),
+  setGoodsIssues: (issues) => set({ goodsIssues: Array.isArray(issues) ? issues : [] }),
   
   addGoodsIssue: (issue) =>
     set((state) => ({
@@ -909,7 +909,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   // STOCKTAKE ACTIONS
   // ============================================
   
-  setStocktakeSessions: (sessions) => set({ stocktakeSessions: sessions }),
+  setStocktakeSessions: (sessions) => set({ stocktakeSessions: Array.isArray(sessions) ? sessions : [] }),
   
   addStocktakeSession: (session) =>
     set((state) => ({
@@ -1047,7 +1047,7 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
   // AUDIT LOG ACTIONS
   // ============================================
   
-  setAuditLogs: (logs) => set({ auditLogs: logs }),
+  setAuditLogs: (logs) => set({ auditLogs: Array.isArray(logs) ? logs : [] }),
   
   addAuditLog: (log) =>
     set((state) => ({
@@ -1253,16 +1253,16 @@ export const useWarehouseStore = create<WarehouseStore>()((set, get) => ({
 // SELECTOR HOOKS
 // ============================================
 
-export const useProducts = () => useWarehouseStore((state) => state.products);
-export const useWarehouses = () => useWarehouseStore((state) => state.warehouses);
-export const useInventoryItems = () => useWarehouseStore((state) => state.inventoryItems);
-export const useSuppliers = () => useWarehouseStore((state) => state.suppliers);
-export const usePurchaseOrders = () => useWarehouseStore((state) => state.purchaseOrders);
-export const useGoodsReceipts = () => useWarehouseStore((state) => state.goodsReceipts);
-export const useGoodsIssues = () => useWarehouseStore((state) => state.goodsIssues);
-export const useStocktakeSessions = () => useWarehouseStore((state) => state.stocktakeSessions);
-export const useAuditLogs = () => useWarehouseStore((state) => state.auditLogs);
-export const useAlerts = () => useWarehouseStore((state) => state.alerts);
+export const useProducts = () => useWarehouseStore((state) => state.products ?? []);
+export const useWarehouses = () => useWarehouseStore((state) => state.warehouses ?? []);
+export const useInventoryItems = () => useWarehouseStore((state) => state.inventoryItems ?? []);
+export const useSuppliers = () => useWarehouseStore((state) => state.suppliers ?? []);
+export const usePurchaseOrders = () => useWarehouseStore((state) => state.purchaseOrders ?? []);
+export const useGoodsReceipts = () => useWarehouseStore((state) => state.goodsReceipts ?? []);
+export const useGoodsIssues = () => useWarehouseStore((state) => state.goodsIssues ?? []);
+export const useStocktakeSessions = () => useWarehouseStore((state) => state.stocktakeSessions ?? []);
+export const useAuditLogs = () => useWarehouseStore((state) => state.auditLogs ?? []);
+export const useAlerts = () => useWarehouseStore((state) => state.alerts ?? []);
 export const useDashboardStats = () => useWarehouseStore((state) => state.stats);
 export const useDashboardData = () => useWarehouseStore((state) => state.dashboardData);
 export const useIsLoading = () => useWarehouseStore((state) => state.isLoading);
