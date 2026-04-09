@@ -1,0 +1,18 @@
+{
+  "name": "Kho Hàng - Quản Lý Kho",
+  "short_name": "Kho Hàng",
+  "description": "Ứng dụng quản lý kho hàng chuyên nghiệp cho nhân viên kho - Hỗ trợ offline, scan barcode, nhập xuất hàng",
+  "start_url": "/mobile",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0ea5e9",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "vi",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [],
+  "shortcuts": [],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

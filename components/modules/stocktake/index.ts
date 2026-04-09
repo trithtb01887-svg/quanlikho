@@ -1,0 +1,2 @@
+// Stocktake module
+export {};
